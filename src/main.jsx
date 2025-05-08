@@ -7,3 +7,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>,
 )
+
+// Register the service worker for PWA support
+if ('serviceWorker' in navigator) {
+  import('virtual:pwa-register').then(({ registerSW }) => {
+    registerSW();
+  });
+}

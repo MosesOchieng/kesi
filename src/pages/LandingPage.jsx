@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 
 const faqs = [
   {
@@ -20,39 +21,72 @@ const faqs = [
 ];
 
 const LandingPage = () => {
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstall, setShowInstall] = useState(false);
+
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstall(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  // Hide install if already installed
+  useEffect(() => {
+    window.addEventListener('appinstalled', () => setShowInstall(false));
+    return () => window.removeEventListener('appinstalled', () => setShowInstall(false));
+  }, []);
+
+  const handleInstallClick = () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(() => setShowInstall(false));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex flex-col">
+      {showInstall && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-blue-700 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-4 animate-fadeIn">
+          <span className="font-semibold">Install KESI for a better experience!</span>
+          <button className="bg-white text-blue-700 px-4 py-2 rounded-lg font-bold hover:bg-blue-100 transition" onClick={handleInstallClick}>Install App</button>
+          <button className="ml-2 text-white text-2xl hover:text-blue-200" onClick={() => setShowInstall(false)}>&times;</button>
+        </div>
+      )}
       {/* Navigation */}
       <nav className="w-full bg-white/80 backdrop-blur-sm z-50 shadow-md sticky top-0">
-        <div className="container max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="container max-w-screen-xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-0">
           <div className="text-2xl font-extrabold text-blue-700 tracking-tight">KESI</div>
-          <div className="space-x-4">
-            <Link to="/login" className="text-gray-700 hover:text-blue-700 font-medium transition">Login</Link>
-            <Link to="/signup" className="bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800 shadow transition font-semibold">Get Started</Link>
+          <div className="space-x-0 sm:space-x-4 flex flex-col sm:flex-row gap-2 sm:gap-0 w-full sm:w-auto items-center">
+            <Link to="/login" className="text-gray-700 hover:text-blue-700 font-medium transition w-full sm:w-auto text-center">Login</Link>
+            <Link to="/signup" className="bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800 shadow transition font-semibold w-full sm:w-auto text-center">Get Started</Link>
           </div>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <section className="flex-1 flex items-center justify-center py-16 md:py-24">
-        <div className="container max-w-screen-lg mx-auto px-6 flex flex-col items-center text-center">
-          <h1 className="text-4xl md:text-6xl font-extrabold text-gray-900 mb-6 leading-tight">
+      <section className="flex-1 flex items-center justify-center py-10 md:py-24">
+        <div className="container max-w-screen-lg mx-auto px-4 sm:px-6 flex flex-col items-center text-center">
+          <h1 className="text-3xl sm:text-4xl md:text-6xl font-extrabold text-gray-900 mb-6 leading-tight">
             Master Legal Practice in a
             <span className="block text-blue-700">Virtual Courtroom</span>
           </h1>
-          <p className="text-lg md:text-xl text-gray-600 mb-10 max-w-2xl mx-auto">
+          <p className="text-base sm:text-lg md:text-xl text-gray-600 mb-10 max-w-2xl mx-auto">
             Experience realistic legal simulations, practice courtroom skills, and advance your legal career with KESI's immersive learning platform.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/signup" className="bg-blue-700 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-800 shadow transition">Start Learning</Link>
-            <a href="#about" className="border-2 border-blue-700 text-blue-700 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-50 transition">Learn More</a>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center w-full sm:w-auto">
+            <Link to="/signup" className="bg-blue-700 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-800 shadow transition w-full sm:w-auto">Start Learning</Link>
+            <a href="#about" className="border-2 border-blue-700 text-blue-700 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-50 transition w-full sm:w-auto">Learn More</a>
           </div>
         </div>
       </section>
 
       {/* About Section */}
       <section id="about" className="bg-white py-12 md:py-16 border-t border-gray-100">
-        <div className="container max-w-screen-lg mx-auto px-6 text-center">
+        <div className="container max-w-screen-lg mx-auto px-4 sm:px-6 text-center">
           <h2 className="text-3xl font-bold text-gray-900 mb-4">About KESI</h2>
           <p className="text-lg text-gray-700 max-w-3xl mx-auto mb-6">
             KESI is a next-generation legal education platform that bridges the gap between theory and practice. Our mission is to empower legal professionals and students with hands-on experience in a safe, virtual environment. Whether you're preparing for moot court, sharpening your litigation skills, or exploring international law, KESI provides the tools and feedback you need to succeed.
@@ -76,7 +110,7 @@ const LandingPage = () => {
 
       {/* How It Works Section */}
       <section className="bg-gray-50 py-12 md:py-16 border-t border-gray-100">
-        <div className="container max-w-screen-lg mx-auto px-6">
+        <div className="container max-w-screen-lg mx-auto px-4 sm:px-6">
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-8">How It Works</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="bg-white rounded-xl shadow p-6 flex flex-col items-center text-center">
@@ -100,7 +134,7 @@ const LandingPage = () => {
 
       {/* Features Section */}
       <section id="features" className="bg-white py-16 md:py-20 border-t border-gray-100">
-        <div className="container max-w-screen-lg mx-auto px-6">
+        <div className="container max-w-screen-lg mx-auto px-4 sm:px-6">
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">Why Choose KESI?</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {features.map((feature, index) => (
@@ -116,7 +150,7 @@ const LandingPage = () => {
 
       {/* Learning Modes Section */}
       <section className="bg-gray-50 py-16 md:py-20 border-t border-gray-100">
-        <div className="container max-w-screen-lg mx-auto px-6">
+        <div className="container max-w-screen-lg mx-auto px-4 sm:px-6">
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">Learning Modes</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {learningModes.map((mode, index) => (
@@ -144,7 +178,7 @@ const LandingPage = () => {
 
       {/* Stats Section */}
       <section className="bg-blue-700 text-white py-16 md:py-20 border-t border-blue-800">
-        <div className="container max-w-screen-lg mx-auto px-6">
+        <div className="container max-w-screen-lg mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {stats.map((stat, index) => (
               <div key={index} className="flex flex-col items-center">
@@ -158,7 +192,7 @@ const LandingPage = () => {
 
       {/* Testimonials Section */}
       <section className="bg-white py-16 md:py-20 border-t border-gray-100">
-        <div className="container max-w-screen-lg mx-auto px-6">
+        <div className="container max-w-screen-lg mx-auto px-4 sm:px-6">
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">What Our Users Say</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {testimonials.map((testimonial, index) => (
@@ -181,7 +215,7 @@ const LandingPage = () => {
 
       {/* FAQ Section */}
       <section className="bg-gray-50 py-12 md:py-16 border-t border-gray-100">
-        <div className="container max-w-screen-lg mx-auto px-6">
+        <div className="container max-w-screen-lg mx-auto px-4 sm:px-6">
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-8">Frequently Asked Questions</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {faqs.map((faq, idx) => (
@@ -196,7 +230,7 @@ const LandingPage = () => {
 
       {/* CTA Section */}
       <section className="bg-gradient-to-r from-blue-700 to-blue-800 text-white py-16 md:py-20 border-t border-blue-900">
-        <div className="container max-w-screen-lg mx-auto px-6 text-center">
+        <div className="container max-w-screen-lg mx-auto px-4 sm:px-6 text-center">
           <h2 className="text-3xl font-bold mb-8">Ready to Transform Your Legal Practice?</h2>
           <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
             Join thousands of legal professionals and students who are already using KESI to enhance their courtroom skills.
@@ -210,7 +244,7 @@ const LandingPage = () => {
 
       {/* Footer */}
       <footer className="bg-white border-t border-gray-200 py-6 mt-8">
-        <div className="container max-w-screen-lg mx-auto px-6 flex flex-col md:flex-row items-center justify-between text-gray-500 text-sm">
+        <div className="container max-w-screen-lg mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between text-gray-500 text-sm">
           <div className="mb-2 md:mb-0">&copy; {new Date().getFullYear()} KESI. All rights reserved.</div>
           <div className="flex gap-4">
             <a href="mailto:info@kesi.com" className="hover:text-blue-700">Contact</a>
