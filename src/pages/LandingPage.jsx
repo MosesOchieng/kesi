@@ -24,23 +24,40 @@ const LandingPage = () => {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstall, setShowInstall] = useState(false);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
+    // Check if device is iOS
+    const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    setIsIOS(isIOSDevice);
+
     // Check if the app is already installed
     if (window.matchMedia('(display-mode: standalone)').matches) {
+      console.log('App is already installed');
       setIsInstallable(false);
       return;
     }
 
-    // Check if the browser supports PWA installation
+    // For iOS devices
+    if (isIOSDevice) {
+      const isInStandaloneMode = ('standalone' in window.navigator) && (window.navigator.standalone);
+      if (!isInStandaloneMode) {
+        console.log('iOS device detected, showing install prompt');
+        setIsInstallable(true);
+        setShowInstall(true);
+      }
+      return;
+    }
+
+    // For Android/other devices
     if ('serviceWorker' in navigator && 'BeforeInstallPromptEvent' in window) {
+      console.log('Device supports PWA installation');
       setIsInstallable(true);
     }
 
     const handler = (e) => {
-      // Prevent Chrome 67 and earlier from automatically showing the prompt
+      console.log('beforeinstallprompt event fired');
       e.preventDefault();
-      // Stash the event so it can be triggered later
       setDeferredPrompt(e);
       setShowInstall(true);
     };
@@ -49,6 +66,7 @@ const LandingPage = () => {
 
     // Listen for successful installation
     window.addEventListener('appinstalled', () => {
+      console.log('App was installed');
       setShowInstall(false);
       setIsInstallable(false);
     });
@@ -60,23 +78,25 @@ const LandingPage = () => {
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
+    if (isIOS) {
+      // For iOS, show instructions
+      alert('To install KESI on your iPhone:\n1. Tap the Share button\n2. Scroll down and tap "Add to Home Screen"\n3. Tap "Add" to install');
+      return;
+    }
 
-    // Show the install prompt
+    if (!deferredPrompt) {
+      console.log('No deferred prompt available');
+      return;
+    }
+
+    console.log('Showing install prompt');
     deferredPrompt.prompt();
 
-    // Wait for the user to respond to the prompt
     const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to the install prompt: ${outcome}`);
     
-    // We no longer need the prompt. Clear it up
     setDeferredPrompt(null);
     setShowInstall(false);
-
-    if (outcome === 'accepted') {
-      console.log('User accepted the install prompt');
-    } else {
-      console.log('User dismissed the install prompt');
-    }
   };
 
   return (
@@ -86,7 +106,9 @@ const LandingPage = () => {
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-slideUp">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-gray-900">Install KESI App</h3>
+                <h3 className="text-xl font-bold text-gray-900">
+                  {isIOS ? 'Add KESI to Home Screen' : 'Install KESI App'}
+                </h3>
                 <button 
                   onClick={() => setShowInstall(false)}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -102,8 +124,16 @@ const LandingPage = () => {
                   <img src="/icons/icon.png" alt="KESI" className="w-12 h-12" />
                 </div>
                 <div>
-                  <p className="text-gray-600 mb-1">Get a better experience with our app!</p>
-                  <p className="text-sm text-gray-500">Access KESI faster and work offline</p>
+                  <p className="text-gray-600 mb-1">
+                    {isIOS 
+                      ? 'Add KESI to your home screen for quick access'
+                      : 'Get a better experience with our app!'}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {isIOS 
+                      ? 'Access KESI faster and work offline'
+                      : 'Access KESI faster and work offline'}
+                  </p>
                 </div>
               </div>
 
@@ -112,10 +142,21 @@ const LandingPage = () => {
                   onClick={handleInstallClick}
                   className="w-full bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-800 transition-colors flex items-center justify-center gap-2"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Install App
+                  {isIOS ? (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add to Home Screen
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Install App
+                    </>
+                  )}
                 </button>
                 <button 
                   onClick={() => setShowInstall(false)}
