@@ -99,7 +99,7 @@ const LandingPage = () => {
               
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <img src="/icons/icon-192x192.png" alt="KESI" className="w-12 h-12" />
+                  <img src="/icons/icon.png" alt="KESI" className="w-12 h-12" />
                 </div>
                 <div>
                   <p className="text-gray-600 mb-1">Get a better experience with our app!</p>
