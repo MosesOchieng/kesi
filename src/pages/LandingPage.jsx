@@ -389,12 +389,12 @@ const stats = [
     label: "Active Users"
   },
   {
-    value: "50,000+",
-    label: "Cases Completed"
+    value: "5,000+",
+    label: "Cases Generated"
   },
   {
-    value: "95%",
-    label: "User Satisfaction"
+    value: "1,200",
+    label: "Historical Cases"
   },
   {
     value: "24/7",
