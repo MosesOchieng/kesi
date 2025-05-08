@@ -360,7 +360,7 @@ const learningModes = [
 
 const stats = [
   {
-    value: "10,000+",
+    value: "1,200+",
     label: "Active Users"
   },
   {
