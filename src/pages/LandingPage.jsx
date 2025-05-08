@@ -23,37 +23,84 @@ const faqs = [
 const LandingPage = () => {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstall, setShowInstall] = useState(false);
+  const [isInstallable, setIsInstallable] = useState(false);
 
   useEffect(() => {
+    // Check if the app is already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstallable(false);
+      return;
+    }
+
+    // Check if the browser supports PWA installation
+    if ('serviceWorker' in navigator && 'BeforeInstallPromptEvent' in window) {
+      setIsInstallable(true);
+    }
+
     const handler = (e) => {
+      // Prevent Chrome 67 and earlier from automatically showing the prompt
       e.preventDefault();
+      // Stash the event so it can be triggered later
       setDeferredPrompt(e);
       setShowInstall(true);
     };
+
     window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+
+    // Listen for successful installation
+    window.addEventListener('appinstalled', () => {
+      setShowInstall(false);
+      setIsInstallable(false);
+    });
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', () => {});
+    };
   }, []);
 
-  // Hide install if already installed
-  useEffect(() => {
-    window.addEventListener('appinstalled', () => setShowInstall(false));
-    return () => window.removeEventListener('appinstalled', () => setShowInstall(false));
-  }, []);
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
 
-  const handleInstallClick = () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then(() => setShowInstall(false));
+    // Show the install prompt
+    deferredPrompt.prompt();
+
+    // Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
+    
+    // We no longer need the prompt. Clear it up
+    setDeferredPrompt(null);
+    setShowInstall(false);
+
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    } else {
+      console.log('User dismissed the install prompt');
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex flex-col">
-      {showInstall && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-blue-700 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-4 animate-fadeIn">
-          <span className="font-semibold">Install KESI for a better experience!</span>
-          <button className="bg-white text-blue-700 px-4 py-2 rounded-lg font-bold hover:bg-blue-100 transition" onClick={handleInstallClick}>Install App</button>
-          <button className="ml-2 text-white text-2xl hover:text-blue-200" onClick={() => setShowInstall(false)}>&times;</button>
+      {isInstallable && showInstall && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-blue-700 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-4 animate-fadeIn max-w-[90%] sm:max-w-md">
+          <div className="flex-1">
+            <span className="font-semibold block mb-1">Install KESI App</span>
+            <span className="text-sm text-blue-100">Get a better experience with our app!</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              className="bg-white text-blue-700 px-4 py-2 rounded-lg font-bold hover:bg-blue-100 transition whitespace-nowrap" 
+              onClick={handleInstallClick}
+            >
+              Install
+            </button>
+            <button 
+              className="text-white text-2xl hover:text-blue-200" 
+              onClick={() => setShowInstall(false)}
+            >
+              ×
+            </button>
+          </div>
         </div>
       )}
       {/* Navigation */}
