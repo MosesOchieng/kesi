@@ -82,24 +82,49 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex flex-col">
       {isInstallable && showInstall && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-blue-700 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-4 animate-fadeIn max-w-[90%] sm:max-w-md">
-          <div className="flex-1">
-            <span className="font-semibold block mb-1">Install KESI App</span>
-            <span className="text-sm text-blue-100">Get a better experience with our app!</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button 
-              className="bg-white text-blue-700 px-4 py-2 rounded-lg font-bold hover:bg-blue-100 transition whitespace-nowrap" 
-              onClick={handleInstallClick}
-            >
-              Install
-            </button>
-            <button 
-              className="text-white text-2xl hover:text-blue-200" 
-              onClick={() => setShowInstall(false)}
-            >
-              ×
-            </button>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-slideUp">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-900">Install KESI App</h3>
+                <button 
+                  onClick={() => setShowInstall(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <img src="/icons/icon-192x192.png" alt="KESI" className="w-12 h-12" />
+                </div>
+                <div>
+                  <p className="text-gray-600 mb-1">Get a better experience with our app!</p>
+                  <p className="text-sm text-gray-500">Access KESI faster and work offline</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={handleInstallClick}
+                  className="w-full bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-800 transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Install App
+                </button>
+                <button 
+                  onClick={() => setShowInstall(false)}
+                  className="w-full text-gray-600 px-6 py-3 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Maybe Later
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
