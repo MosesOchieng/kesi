@@ -26,6 +26,28 @@ const LandingPage = () => {
   const [isInstallable, setIsInstallable] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
 
+  // Check if we should show the prompt based on session
+  const shouldShowPrompt = () => {
+    const lastPromptTime = localStorage.getItem('lastPromptTime');
+    const promptDismissed = localStorage.getItem('promptDismissed');
+    
+    if (!lastPromptTime) return true;
+    
+    // Show prompt again after 24 hours
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    const timeSinceLastPrompt = Date.now() - parseInt(lastPromptTime);
+    
+    return timeSinceLastPrompt > ONE_DAY && !promptDismissed;
+  };
+
+  // Save prompt interaction to localStorage
+  const savePromptInteraction = (action) => {
+    localStorage.setItem('lastPromptTime', Date.now().toString());
+    if (action === 'dismiss') {
+      localStorage.setItem('promptDismissed', 'true');
+    }
+  };
+
   useEffect(() => {
     // Check if device is iOS
     const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -41,7 +63,7 @@ const LandingPage = () => {
     // For iOS devices
     if (isIOSDevice) {
       const isInStandaloneMode = ('standalone' in window.navigator) && (window.navigator.standalone);
-      if (!isInStandaloneMode) {
+      if (!isInStandaloneMode && shouldShowPrompt()) {
         console.log('iOS device detected, showing install prompt');
         setIsInstallable(true);
         setShowInstall(true);
@@ -59,7 +81,9 @@ const LandingPage = () => {
       console.log('beforeinstallprompt event fired');
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowInstall(true);
+      if (shouldShowPrompt()) {
+        setShowInstall(true);
+      }
     };
 
     window.addEventListener('beforeinstallprompt', handler);
@@ -69,6 +93,9 @@ const LandingPage = () => {
       console.log('App was installed');
       setShowInstall(false);
       setIsInstallable(false);
+      // Clear prompt history when app is installed
+      localStorage.removeItem('lastPromptTime');
+      localStorage.removeItem('promptDismissed');
     });
 
     return () => {
@@ -81,6 +108,7 @@ const LandingPage = () => {
     if (isIOS) {
       // For iOS, show instructions
       alert('To install KESI on your iPhone:\n1. Tap the Share button\n2. Scroll down and tap "Add to Home Screen"\n3. Tap "Add" to install');
+      savePromptInteraction('install');
       return;
     }
 
@@ -95,8 +123,19 @@ const LandingPage = () => {
     const { outcome } = await deferredPrompt.userChoice;
     console.log(`User response to the install prompt: ${outcome}`);
     
+    if (outcome === 'accepted') {
+      savePromptInteraction('install');
+    } else {
+      savePromptInteraction('dismiss');
+    }
+    
     setDeferredPrompt(null);
     setShowInstall(false);
+  };
+
+  const handleDismiss = () => {
+    setShowInstall(false);
+    savePromptInteraction('dismiss');
   };
 
   return (
@@ -110,7 +149,7 @@ const LandingPage = () => {
                   {isIOS ? 'Add KESI to Home Screen' : 'Install KESI App'}
                 </h3>
                 <button 
-                  onClick={() => setShowInstall(false)}
+                  onClick={handleDismiss}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -159,7 +198,7 @@ const LandingPage = () => {
                   )}
                 </button>
                 <button 
-                  onClick={() => setShowInstall(false)}
+                  onClick={handleDismiss}
                   className="w-full text-gray-600 px-6 py-3 rounded-xl font-medium hover:bg-gray-50 transition-colors"
                 >
                   Maybe Later
