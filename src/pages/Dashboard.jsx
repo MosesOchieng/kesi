@@ -1,5 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import JudgeMatchingSystem from '../components/JudgeMatchingSystem';
+import OverviewSection from '../components/sections/OverviewSection';
+import CasesSection from '../components/sections/CasesSection';
+import FeedbackSection from '../components/sections/FeedbackSection';
+import EvidenceSection from '../components/sections/EvidenceSection';
+import SimulationSection from '../components/sections/SimulationSection';
+import LearningSection from '../components/sections/LearningSection';
+import CommunitySection from '../components/sections/CommunitySection';
+import NotificationsSection from '../components/sections/NotificationsSection';
+import SyntheticEvidenceGenerator from '../components/SyntheticEvidenceGenerator';
+import { fetchSheriaHubCases, processCaseData } from '../utils/caseDataManager';
+import { fetchHuggingFaceCases, processDatasetCase, combineCases } from '../utils/datasetManager';
+import Navbar from '../components/Navbar';
+import { useAuth } from '../contexts/AuthContext';
 
 function Modal({ open, onClose, title, children, type = 'info', wide }) {
   if (!open) return null;
@@ -12,21 +26,19 @@ function Modal({ open, onClose, title, children, type = 'info', wide }) {
           <button onClick={onClose} className="text-white text-2xl hover:text-gray-200">&times;</button>
         </div>
         <div className="p-6">{children}</div>
-                </div>
-              </div>
+      </div>
+    </div>
   );
 }
 
-const sidebarSections = [
-  { id: 'overview', label: 'Overview', icon: '🏠' },
-  { id: 'cases', label: 'Cases', icon: '📂' },
-  { id: 'ai', label: 'AI Roleplay', icon: '🤖' },
-  { id: 'feedback', label: 'Feedback', icon: '📊' },
-  { id: 'evidence', label: 'Evidence', icon: '🧾' },
-  { id: 'simulation', label: 'Simulation', icon: '🎬' },
-  { id: 'learning', label: 'Learning', icon: '📚' },
-  { id: 'community', label: 'Community', icon: '👥' },
-  { id: 'notifications', label: 'Notifications', icon: '🔔' },
+const sections = [
+  { id: 'overview', name: 'Overview', icon: '📊' },
+  { id: 'cases', name: 'Cases', icon: '📁' },
+  { id: 'ai', name: 'AI Roleplay', icon: '🤖' },
+  { id: 'evidence', name: 'Evidence & Generation', icon: '🔍' },
+  { id: 'feedback', name: 'Feedback', icon: '💬' },
+  { id: 'learning', name: 'Learning', icon: '📚' },
+  { id: 'community', name: 'Community', icon: '👥' }
 ];
 
 const demoBadges = [
@@ -161,40 +173,197 @@ function CaseIntroMessage({ caseObj, agents, calendarEvents, onClose }) {
   );
 }
 
+// Add ErrorBoundary component
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("Error in SectionPanel:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <div>Something went wrong. Please try again.</div>;
+    }
+    return this.props.children;
+  }
+}
+
+// Add case status progression
+const caseStatuses = {
+  DRAFT: 'Draft',
+  FILED: 'Filed',
+  PREPARATION: 'In Preparation',
+  SCHEDULED: 'Scheduled',
+  IN_PROGRESS: 'In Progress',
+  SETTLEMENT: 'Settlement Phase',
+  CLOSED: 'Closed'
+};
+
+// Add case progression steps
+const caseProgressionSteps = [
+  { id: 'draft', name: 'Draft', status: caseStatuses.DRAFT },
+  { id: 'filing', name: 'Filing', status: caseStatuses.FILED },
+  { id: 'preparation', name: 'Preparation', status: caseStatuses.PREPARATION },
+  { id: 'scheduling', name: 'Scheduling', status: caseStatuses.SCHEDULED },
+  { id: 'proceedings', name: 'Proceedings', status: caseStatuses.IN_PROGRESS },
+  { id: 'settlement', name: 'Settlement', status: caseStatuses.SETTLEMENT },
+  { id: 'closing', name: 'Closing', status: caseStatuses.CLOSED }
+];
+
 export default function Dashboard() {
+  const { user } = useAuth();
   const [section, setSection] = useState('overview');
   const [modal, setModal] = useState({ open: false, title: '', content: null, type: 'info', wide: false });
-  const [selectedAgent, setSelectedAgent] = useState(demoAgents[0]);
-  const [currentCaseId, setCurrentCaseId] = useState(demoActiveCases[0].id);
-  const [chat, setChat] = useState({
-    [demoActiveCases[0].id]: {
-      Judge: [{ sender: 'AI Judge', text: 'Welcome to the courtroom. How can I help?' }],
-      Prosecutor: [{ sender: 'AI Prosecutor', text: 'Ready to present the case.' }],
-      Defense: [{ sender: 'AI Defense', text: 'Here to defend the client.' }],
-      Police: [{ sender: 'AI Police', text: 'Investigation details available.' }],
-      Clerk: [{ sender: 'AI Clerk', text: 'Court records are up to date.' }],
-      Defendant: [{ sender: 'AI Defendant', text: 'I am innocent.' }],
-      Witness: [{ sender: 'AI Witness', text: 'Ready to testify.' }],
-    }
-  });
+  const [selectedAgent, setSelectedAgent] = useState(null);
+  const [currentCaseId, setCurrentCaseId] = useState(null);
+  const [chat, setChat] = useState({});
   const [evidenceModal, setEvidenceModal] = useState(null);
-  const [notifications, setNotifications] = useState(demoNotifications);
-  const [activeCases, setActiveCases] = useState(demoActiveCases);
-  const [uploadedCases, setUploadedCases] = useState(demoUploadedCases);
-  const [badges, setBadges] = useState(demoBadges);
-  const [skills, setSkills] = useState(demoSkills);
+  const [notifications, setNotifications] = useState([]);
+  const [activeCases, setActiveCases] = useState([]);
+  const [uploadedCases, setUploadedCases] = useState([]);
+  const [badges, setBadges] = useState([]);
+  const [skills, setSkills] = useState([]);
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
   const [lastUserEmail, setLastUserEmail] = useState(null);
-  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [toast, setToast] = useState('');
   const [caseDetails, setCaseDetails] = useState(null);
   const [joinedCases, setJoinedCases] = useState([]);
-  const [userRoles, setUserRoles] = useState({}); // { [caseId]: role }
-  const [showCaseIntro, setShowCaseIntro] = useState(true);
+  const [userRoles, setUserRoles] = useState({});
+  const [historicalCases, setHistoricalCases] = useState([]);
+  const navigate = useNavigate();
+
+  // Update default data for new users to be empty
+  const defaultActiveCases = [];
+  const defaultUploadedCases = [];
+  const defaultBadges = [];
+  const defaultSkills = [
+    { name: 'Legal Research', value: 0 },
+    { name: 'Case Analysis', value: 0 },
+    { name: 'Document Preparation', value: 0 },
+    { name: 'Client Communication', value: 0 }
+  ];
+
+  // Update the loadCases function
+  const loadCases = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        console.log('No auth token found, using empty data');
+        setActiveCases(defaultActiveCases);
+        setUploadedCases(defaultUploadedCases);
+        setBadges(defaultBadges);
+        setSkills(defaultSkills);
+        return;
+      }
+
+      // First try to get cases from our backend server
+      const response = await fetch('http://localhost:3001/api/cases', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.status === 401) {
+        console.log('Token expired or invalid, using empty data');
+        setActiveCases(defaultActiveCases);
+        setUploadedCases(defaultUploadedCases);
+        setBadges(defaultBadges);
+        setSkills(defaultSkills);
+        return;
+      }
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch cases from server');
+      }
+      
+      const serverCases = await response.json();
+      
+      // Then try to get cases from web scraping (Python backend)
+      const scrapingResponse = await fetch('http://localhost:3001/api/scraped-cases', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      let scrapedCases = [];
+      if (scrapingResponse.ok) {
+        scrapedCases = await scrapingResponse.json();
+      }
+
+      // Get user progress (badges and skills)
+      const progressResponse = await fetch('http://localhost:3001/api/user-progress', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (progressResponse.ok) {
+        const userProgress = await progressResponse.json();
+        setBadges(userProgress.badges || defaultBadges);
+        setSkills(userProgress.skills || defaultSkills);
+      } else {
+        setBadges(defaultBadges);
+        setSkills(defaultSkills);
+      }
+
+      // Generate AI cases similar to scraped cases
+      const aiGeneratedCases = scrapedCases.map(case_ => ({
+        ...case_,
+        id: `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: `AI ${case_.name}`,
+        source: 'ai',
+        type: case_.type,
+        area: case_.area,
+        location: case_.location,
+        description: `AI-generated case based on ${case_.name}`,
+        status: 'Ongoing',
+        role: 'Unassigned'
+      }));
+
+      // Combine and process all cases
+      const allCases = [...serverCases, ...scrapedCases, ...aiGeneratedCases].map(case_ => ({
+        ...case_,
+        type: case_.source === 'scraped' ? 'Historical' : case_.type || 'Manual',
+        status: case_.status || 'Ongoing',
+        role: case_.role || 'Unassigned'
+      }));
+
+      setActiveCases(allCases);
+      setUploadedCases(allCases.filter(c => c.type === 'Manual'));
+      
+    } catch (error) {
+      console.error('Error loading cases:', error);
+      // Fallback to empty data if there's an error
+      setActiveCases(defaultActiveCases);
+      setUploadedCases(defaultUploadedCases);
+      setBadges(defaultBadges);
+      setSkills(defaultSkills);
+    }
+  };
+
+  useEffect(() => {
+    // Check if user is authenticated
+    if (!user) {
+      console.log('No user found, redirecting to login');
+      navigate('/login');
+      return;
+    }
+
+    // Load initial data
+    loadCases();
+  }, [user, navigate]);
 
   // Get user from localStorage if available
-  const user = JSON.parse(localStorage.getItem('kesi-user'));
   const defaultProfile = user
     ? {
         name: user.email.split('@')[0] || 'New User',
@@ -205,43 +374,6 @@ export default function Dashboard() {
 
   const [profile, setProfile] = useState(defaultProfile);
 
-  // Initial values for resetting
-  const initialActiveCases = [
-    { id: 1, name: 'State vs. Smith', type: 'AI', role: 'Prosecutor', deadline: '2024-07-20', status: 'Ongoing' },
-    { id: 2, name: 'Johnson Estate', type: 'Manual', role: 'Defense', deadline: '2024-07-25', status: 'Ongoing' },
-    { id: 3, name: 'People vs. Doe', type: 'Historical', role: 'Judge', deadline: '2024-07-30', status: 'Ongoing' },
-    { id: 4, name: 'AI v. Human', type: 'AI', role: 'Defense', deadline: '2024-08-01', status: 'Ongoing' },
-    { id: 5, name: 'Legacy Case', type: 'Historical', role: 'Prosecutor', deadline: '2024-08-05', status: 'Ongoing' },
-  ];
-  const initialUploadedCases = [
-    { id: 1, name: 'My Uploaded Case', type: 'Manual', evidence: 3 },
-    { id: 2, name: 'Historic Land Dispute', type: 'Historical', evidence: 2 },
-    { id: 3, name: 'AI Arbitration', type: 'AI', evidence: 1 },
-    { id: 4, name: 'Estate Challenge', type: 'Manual', evidence: 4 },
-    { id: 5, name: 'Old Court Records', type: 'Historical', evidence: 2 },
-  ];
-  const initialBadges = [
-    { name: 'Case Starter', icon: '🏅' },
-    { name: 'Objection Master', icon: '⚡' },
-    { name: 'Evidence Pro', icon: '📑' },
-  ];
-  const initialSkills = [
-    { name: 'Legal Arguments', value: 80 },
-    { name: 'Objection Handling', value: 65 },
-    { name: 'Cross-Examination', value: 72 },
-  ];
-  const initialChat = {
-    1: {
-      Judge: [{ sender: 'AI Judge', text: 'Welcome to the courtroom. How can I help?' }],
-      Prosecutor: [{ sender: 'AI Prosecutor', text: 'Ready to present the case.' }],
-      Defense: [{ sender: 'AI Defense', text: 'Here to defend the client.' }],
-      Police: [{ sender: 'AI Police', text: 'Investigation details available.' }],
-      Clerk: [{ sender: 'AI Clerk', text: 'Court records are up to date.' }],
-      Defendant: [{ sender: 'AI Defendant', text: 'I am innocent.' }],
-      Witness: [{ sender: 'AI Witness', text: 'Ready to testify.' }],
-    }
-  };
-
   // Reset dashboard state for new user
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('kesi-user'));
@@ -249,7 +381,12 @@ export default function Dashboard() {
       setActiveCases([]);
       setUploadedCases([]);
       setBadges([]);
-      setSkills([]);
+      setSkills([
+        { name: 'Legal Research', value: 0 },
+        { name: 'Case Analysis', value: 0 },
+        { name: 'Document Preparation', value: 0 },
+        { name: 'Client Communication', value: 0 }
+      ]);
       setProfile({
         name: user.email.split('@')[0] || 'New User',
         role: user.rolePreference || 'Lawyer',
@@ -265,7 +402,7 @@ export default function Dashboard() {
     const user = JSON.parse(localStorage.getItem('kesi-user'));
     const onboarded = localStorage.getItem('kesi-onboarded');
     if (user && !onboarded) {
-      setShowOnboarding(true);
+      setShowNewCaseModal(true);
     }
   }, []);
 
@@ -325,7 +462,7 @@ export default function Dashboard() {
             <li key={idx}>{log.action} by {log.user} at {log.timestamp}</li>
           ))}
         </ul>
-              </div>
+      </div>
     ), 'info', true);
   };
 
@@ -343,7 +480,7 @@ export default function Dashboard() {
           ))}
         </ul>
         <div className="mb-2">Suggestions: <span className="text-blue-700">Practice objection handling and review cross-examination guides.</span></div>
-            </div>
+      </div>
     ), 'info');
   };
 
@@ -353,7 +490,7 @@ export default function Dashboard() {
       <div>
         <div className="mb-2">A surprise witness has appeared! Adapt your strategy.</div>
         <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700" onClick={closeModal}>OK</button>
-              </div>
+      </div>
     ), 'info');
   };
 
@@ -363,7 +500,7 @@ export default function Dashboard() {
       <div>
         <div className="mb-2">Launching simulation for case #{caseId}...</div>
         <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700" onClick={closeModal}>OK</button>
-              </div>
+      </div>
     ), 'info');
   };
 
@@ -528,26 +665,98 @@ export default function Dashboard() {
     );
   }
 
-  // Add handler to create a new case
+  // Update handleCreateCase function
   const handleCreateCase = (name, type, area, location, storyline) => {
     const newId = Math.max(...activeCases.map(c => c.id), 0) + 1;
-    setActiveCases(prev => [
-      ...prev,
-      {
-        id: newId,
-        name,
-        type,
-        area,
-        location,
-        storyline,
-        role: 'Unassigned',
-        deadline: 'TBD',
-        status: 'Ongoing',
+    const newCase = {
+      id: newId,
+      name,
+      type,
+      area,
+      location,
+      storyline,
+      role: 'Unassigned',
+      deadline: 'TBD',
+      status: caseStatuses.DRAFT,
+      currentStep: 'draft',
+      progression: {
+        steps: caseProgressionSteps,
+        currentStepIndex: 0
       },
-    ]);
+      timeline: [{
+        date: new Date().toISOString(),
+        action: 'Case Created',
+        description: 'Initial case draft created',
+        status: 'completed'
+      }],
+      evidence: [],
+      interactions: [],
+      participants: []
+    };
+    
+    setActiveCases(prev => [...prev, newCase]);
     setShowNewCaseModal(false);
     closeModal();
     showToast('Case created successfully!');
+  };
+
+  // Add function to update case status
+  const updateCaseStatus = (caseId, newStep) => {
+    setActiveCases(prev => prev.map(case_ => {
+      if (case_.id === caseId) {
+        const stepIndex = caseProgressionSteps.findIndex(step => step.id === newStep);
+        const newTimeline = [...case_.timeline, {
+          date: new Date().toISOString(),
+          action: `Status Updated to ${caseProgressionSteps[stepIndex].name}`,
+          description: `Case moved to ${caseProgressionSteps[stepIndex].name} phase`,
+          status: 'completed'
+        }];
+        
+        return {
+          ...case_,
+          status: caseProgressionSteps[stepIndex].status,
+          currentStep: newStep,
+          progression: {
+            ...case_.progression,
+            currentStepIndex: stepIndex
+          },
+          timeline: newTimeline
+        };
+      }
+      return case_;
+    }));
+  };
+
+  // Add function to handle case progression
+  const handleCaseProgression = (caseId, direction) => {
+    setActiveCases(prev => prev.map(case_ => {
+      if (case_.id === caseId) {
+        const currentIndex = case_.progression.currentStepIndex;
+        const newIndex = direction === 'next' 
+          ? Math.min(currentIndex + 1, caseProgressionSteps.length - 1)
+          : Math.max(currentIndex - 1, 0);
+        
+        const newStep = caseProgressionSteps[newIndex].id;
+        const newTimeline = [...case_.timeline, {
+          date: new Date().toISOString(),
+          action: `Progressed to ${caseProgressionSteps[newIndex].name}`,
+          description: `Case moved to ${caseProgressionSteps[newIndex].name} phase`,
+          status: 'completed'
+        }];
+        
+        return {
+          ...case_,
+          status: caseProgressionSteps[newIndex].status,
+          currentStep: newStep,
+          progression: {
+            ...case_.progression,
+            currentStepIndex: newIndex
+          },
+          timeline: newTimeline
+        };
+      }
+      return case_;
+    }));
   };
 
   // Edit Profile Modal
@@ -601,766 +810,146 @@ export default function Dashboard() {
       user.avatar = newProfile.avatar;
       localStorage.setItem('kesi-user', JSON.stringify(user));
     }
-    setShowEditProfileModal(false);
+    setModal({ ...modal, open: false });
   };
 
-  // Onboarding Modal with avatar selection
-  function OnboardingModal({ onComplete }) {
-    const [step, setStep] = useState(0); // 0: avatar, 1: info
-    const [avatar, setAvatar] = useState('https://randomuser.me/api/portraits/men/32.jpg');
-    const [customAvatar, setCustomAvatar] = useState('');
-    const [interests, setInterests] = useState('');
-    const [goals, setGoals] = useState('');
-    const avatarOptions = [
-      'https://randomuser.me/api/portraits/men/32.jpg',
-      'https://randomuser.me/api/portraits/women/44.jpg',
-      'https://randomuser.me/api/portraits/men/45.jpg',
-      'https://randomuser.me/api/portraits/women/46.jpg',
-      'https://randomuser.me/api/portraits/men/47.jpg',
-      'https://randomuser.me/api/portraits/women/48.jpg',
-    ];
+  // Toast notification component
+  function Toast({ message, onClose }) {
+    if (!message) return null;
     return (
-      <form onSubmit={e => { e.preventDefault(); if (step === 0) { setStep(1); } else { onComplete({ interests, goals, avatar }); } }}>
-        {step === 0 && (
-          <div>
-            <div className="mb-2 font-semibold text-lg">Choose Your Avatar</div>
-            <div className="flex gap-3 flex-wrap mb-4 justify-center">
-              {avatarOptions.map(url => (
-                <button
-                  type="button"
-                  key={url}
-                  className={`rounded-full border-2 ${avatar === url ? 'border-blue-600' : 'border-transparent'} focus:outline-none`}
-                  onClick={() => setAvatar(url)}
-                >
-                  <img src={url} alt="avatar" className="w-16 h-16 rounded-full" />
-                </button>
-              ))}
-            </div>
-            <div className="mb-2 text-sm text-gray-700">Or enter a custom avatar URL:</div>
-            <input
-              className="border border-gray-300 rounded px-2 py-1 w-full mb-4"
-              value={customAvatar}
-              onChange={e => setCustomAvatar(e.target.value)}
-              placeholder="Custom avatar URL"
-              onBlur={() => { if (customAvatar) setAvatar(customAvatar); }}
-            />
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full">Next</button>
-          </div>
-        )}
-        {step === 1 && (
-          <div>
-            <div className="mb-2 font-semibold text-lg">Welcome to KESI!</div>
-            <div className="mb-2 text-sm text-gray-700">Tell us a bit about your interests and goals to personalize your experience.</div>
-            <input
-              className="border border-gray-300 rounded px-2 py-1 w-full mb-2"
-              value={interests}
-              onChange={e => setInterests(e.target.value)}
-              placeholder="Your interests (e.g., criminal law, advocacy, AI)"
-            />
-            <input
-              className="border border-gray-300 rounded px-2 py-1 w-full mb-4"
-              value={goals}
-              onChange={e => setGoals(e.target.value)}
-              placeholder="Your goals (e.g., become a top litigator, learn AI law)"
-            />
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full">Get Started</button>
-          </div>
-        )}
-      </form>
+      <div className="fixed top-6 right-6 z-50 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-fadeIn">
+        <span className="text-xl">✔️</span>
+        <span>{message}</span>
+        <button className="ml-2 text-white text-lg" onClick={onClose}>&times;</button>
+      </div>
     );
   }
 
-  const handleCompleteOnboarding = (data) => {
-    // Save onboarding data to localStorage (or backend)
-    const user = JSON.parse(localStorage.getItem('kesi-user'));
-    if (user) {
-      user.interests = data.interests;
-      user.goals = data.goals;
-      user.avatar = data.avatar;
-      localStorage.setItem('kesi-user', JSON.stringify(user));
-    }
-    setProfile(prev => ({ ...prev, avatar: data.avatar }));
-    localStorage.setItem('kesi-onboarded', 'true');
-    setShowOnboarding(false);
-    showToast('Onboarding completed!');
+  // Helper to show toast for 2.5s
+  const showToast = (msg) => {
+    setModal({ ...modal, content: msg });
+    setTimeout(() => setModal({ ...modal, content: null }), 2500);
   };
-
-  // Sidebar navigation
-  function Sidebar() {
-    return (
-      <aside className="bg-white shadow h-full w-20 md:w-56 flex flex-col py-4 px-2 md:px-4">
-        <div className="mb-8 flex flex-col items-center md:items-start">
-          <img src={profile.avatar} alt="avatar" className="w-12 h-12 rounded-full mb-2" />
-          <div className="font-bold text-gray-800 text-center md:text-left">{profile.name}</div>
-          <div className="text-xs text-gray-500 text-center md:text-left">{profile.role}</div>
-        </div>
-        <nav className="flex-1 flex flex-col gap-2">
-          {sidebarSections.map(sec => (
-                <button
-              key={sec.id}
-              className={`flex items-center gap-2 px-2 py-2 rounded hover:bg-blue-50 transition text-left ${section === sec.id ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-gray-700'}`}
-              onClick={() => setSection(sec.id)}
-            >
-              <span className="text-xl">{sec.icon}</span>
-              <span className="hidden md:inline">{sec.label}</span>
-                </button>
-              ))}
-            </nav>
-      </aside>
-    );
-  }
-
-  // Topbar with notifications
-  function Topbar() {
-    return (
-      <header className="bg-white shadow flex items-center justify-between px-4 py-2">
-        <div className="font-bold text-blue-700 text-xl">KESI Dashboard</div>
-        <div className="flex items-center gap-4">
-          <button onClick={() => setSection('notifications')} className="relative">
-            <span className="text-2xl">🔔</span>
-            {notifications.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1">{notifications.length}</span>}
-          </button>
-          </div>
-      </header>
-    );
-  }
 
   // Section panels
   function SectionPanel() {
     switch (section) {
       case 'overview':
-        return (
-          <div className="p-4 space-y-6">
-            {showOnboarding && (
-              <Modal open={true} onClose={() => setShowOnboarding(false)} title="Welcome to KESI" type="info" wide={false}>
-                <OnboardingModal onComplete={handleCompleteOnboarding} />
-              </Modal>
-            )}
-            {caseDetails && (
-              <Modal open={true} onClose={() => setCaseDetails(null)} title={caseDetails.name} type="info" wide={true}>
-                <div className="max-w-5xl w-full mx-auto p-2 md:p-0">
-                  <div className="flex flex-col md:flex-row gap-8">
-                    {/* Left column: agents, evidence, pre-court chat */}
-                    <div className="flex-1 min-w-[320px] max-w-[400px]">
-                      <div className="mb-4">
-                        <div className="font-semibold mb-1">Agents Involved:</div>
-                        <div className="flex gap-3 flex-wrap items-center">
-                          {getCaseAgents(caseDetails).map((agent, idx) => (
-                            <div key={idx} className="flex flex-col items-center text-xs">
-                              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 mb-1">
-                                {typeof agent.avatar === 'string' ? <span className="text-2xl">{agent.avatar}</span> : agent.avatar}
-                              </div>
-                              <div className="font-semibold text-blue-700">{agent.role}</div>
-                              <div className="text-gray-500">{agent.name}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="mb-4">
-                        <div className="font-semibold mb-1">Evidence:</div>
-                        <div className="flex flex-wrap gap-3">
-                          {(evidence[caseDetails.id] || []).map(ev => (
-                            <div key={ev.id} className="bg-white border rounded p-2 flex flex-col items-center w-32 shadow-sm">
-                              <div className="font-medium text-gray-800 text-xs mb-1">{ev.name}</div>
-                              {ev.type === 'image' && <img src={ev.url} alt={ev.name} className="w-20 h-14 object-cover rounded mb-1" />}
-                              {ev.type === 'video' && <video src={ev.url} controls className="w-20 h-14 rounded mb-1" />}
-                              {ev.type === 'document' && <img src={ev.url} alt={ev.name} className="w-20 h-14 object-cover rounded mb-1" />}
-                              {ev.type === 'text' && <div className="text-xs text-gray-600 italic">{ev.text}</div>}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      {/* Pre-court chat */}
-                      <div className="mb-4">
-                        <div className="font-semibold mb-1">Pre-Court Chat</div>
-                        <div className="flex gap-2 mb-2">
-                          <select className="border border-gray-300 rounded px-2 py-1 text-xs" value={preCourtRecipient} onChange={e => setPreCourtRecipient(e.target.value)}>
-                            <option value="">Select Agent</option>
-                            {getCaseAgents(caseDetails).map(a => (
-                              <option key={a.role} value={a.role}>{a.role}</option>
-                            ))}
-                          </select>
-                          <form className="flex-1 flex gap-2" onSubmit={e => { e.preventDefault(); const val = e.target.elements.msg.value; if (val && preCourtRecipient) { handlePreCourtSend(val, preCourtRecipient); e.target.reset(); } }}>
-                            <input name="msg" className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs" placeholder="Message..." />
-                            <button type="submit" className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-xs">Send</button>
-                          </form>
-                        </div>
-                        <div className="bg-gray-50 rounded p-2 h-24 overflow-y-auto text-xs text-gray-700" style={{ maxHeight: 96 }}>
-                          {preCourtChat.filter(m => m.caseId === caseDetails.id).map((msg, idx) => (
-                            <div key={idx}><span className="font-semibold text-blue-700">To {msg.agent}</span>: {msg.message} <span className="text-gray-400">({msg.time})</span></div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    {/* Right column: details, calendar, twists, etc. */}
-                    <div className="flex-1 min-w-[320px]">
-                      <div className="mb-2 text-sm text-gray-500">{caseDetails.type} • {caseDetails.area} • {caseDetails.location} • Deadline: {caseDetails.deadline}</div>
-                      <div className="mb-2 text-xs text-gray-700 flex gap-4">
-                        <span>Status: <span className="font-semibold text-blue-700">{caseDetails.status || 'Ongoing'}</span></span>
-                        <span>Participants: <span className="font-semibold text-blue-700">{getCaseAgents(caseDetails).length}</span></span>
-                        <span>Last Activity: <span className="font-semibold text-blue-700">{caseInteractions.filter(i => i.caseId === caseDetails.id).slice(-1)[0]?.timestamp || 'N/A'}</span></span>
-                      </div>
-                      {caseDetails.storyline && <div className="mb-4 bg-blue-50 rounded p-3 text-gray-700 italic">{caseDetails.storyline}</div>}
-                      {joinedCases.includes(caseDetails.id) ? (
-                        <>
-                          <div className="mb-4">
-                            <div className="font-semibold mb-1">Your Role:</div>
-                            <div className="flex gap-2 items-center">
-                              <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-semibold">{userRoles[caseDetails.id] || 'Participant'}</span>
-                              <select
-                                className="border border-gray-300 rounded px-2 py-1 text-xs"
-                                value={userRoles[caseDetails.id] || ''}
-                                onChange={e => { setUserRoles(r => ({ ...r, [caseDetails.id]: e.target.value })); addNotification(`Role changed to ${e.target.value}`); setCaseInteractions(interactions => [...interactions, { caseId: caseDetails.id, type: 'role', agent: profile.name, message: `Role changed to ${e.target.value}`, timestamp: new Date().toLocaleTimeString() }]); }}
-                              >
-                                <option value="">Select Role</option>
-                                {getAvailableRoles(caseDetails).map(role => (
-                                  <option key={role} value={role}>{role}</option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-                          {userRoles[caseDetails.id] && (
-                            <div className="mb-4 bg-green-50 border border-green-200 rounded p-3 text-green-800 flex items-center gap-2">
-                              <span className="text-xl">➡️</span>
-                              <span>{roleNextSteps[userRoles[caseDetails.id]] || 'You can now chat with AI agents, upload evidence, or participate in the case.'}</span>
-                            </div>
-                          )}
-                          {/* Calendar */}
-                          <div className="mb-4">
-                            <div className="font-semibold mb-1">Court Calendar:</div>
-                            <div className="bg-gray-50 rounded p-3 mb-2">
-                              <ul className="text-xs text-gray-700">
-                                {calendarEvents.filter(ev => ev.caseId === caseDetails.id).map((ev, idx) => (
-                                  <li key={idx}><span className="font-semibold text-blue-700">{ev.date}:</span> {ev.title}</li>
-                                ))}
-                              </ul>
-                              <form className="flex gap-2 mt-2" onSubmit={e => { e.preventDefault(); const date = e.target.elements.date.value; const title = e.target.elements.title.value; if (date && title) { handleAddEvent(caseDetails.id, date, title); e.target.reset(); } }}>
-                                <input type="date" name="date" className="border border-gray-300 rounded px-2 py-1 text-xs" />
-                                <input type="text" name="title" className="border border-gray-300 rounded px-2 py-1 text-xs" placeholder="Event Title" />
-                                <button type="submit" className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700">Add</button>
-                              </form>
-                            </div>
-                          </div>
-                          {/* Twist */}
-                          <div className="mb-4">
-                            <button className="bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700 mr-2" onClick={handleCaseTwist}>Add Twist</button>
-                            <button className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700" onClick={() => setShowCourtroom(true)}>Live Courtroom</button>
-                          </div>
-                          <div className="flex gap-2 mt-4">
-                            <button className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700" onClick={() => { setJoinedCases(jc => jc.filter(id => id !== caseDetails.id)); showToast('You left the case.'); }}>Leave Case</button>
-                            <button className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400" onClick={() => setCaseDetails(null)}>Close</button>
-                          </div>
-                          {/* Live Courtroom Modal */}
-                          {showCourtroom && (
-                            <Modal open={true} onClose={() => setShowCourtroom(false)} title="Live Courtroom" type="info" wide={true}>
-                              <div className="flex flex-col md:flex-row gap-8">
-                                {/* Left: participants and timeline */}
-                                <div className="flex-1 min-w-[320px] max-w-[400px]">
-                                  <div className="mb-4 font-semibold">Courtroom Participants</div>
-                                  <div className="flex gap-4 flex-wrap mb-4">
-                                    {getCaseAgents(caseDetails).map((agent, idx) => (
-                                      <div key={idx} className="flex flex-col items-center text-xs">
-                                        <div className={`w-12 h-12 flex items-center justify-center rounded-full mb-1 ${currentSpeaker === agent.role ? 'bg-green-200 border-2 border-green-600' : 'bg-blue-100'}`}
-                                          style={{ transition: 'all 0.2s' }}>
-                                          {typeof agent.avatar === 'string' ? <span className="text-2xl">{agent.avatar}</span> : agent.avatar}
-                                        </div>
-                                        <div className="font-semibold text-blue-700">{agent.role}</div>
-                                        <div className="text-gray-500">{agent.name}</div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <div className="mb-4 font-semibold">Proceedings Timeline</div>
-                                  <ul className="mb-4 text-xs text-gray-700">
-                                    {courtroomTimeline.map((item, idx) => (
-                                      <li key={idx}><span className="font-semibold text-blue-700">{item.time}:</span> {item.action}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                                {/* Right: chat */}
-                                <div className="flex-1 min-w-[320px]">
-                                  <div className="mb-4 font-semibold">Courtroom Chat</div>
-                                  <div className="bg-gray-50 rounded p-3 mb-2 h-40 overflow-y-auto text-xs text-gray-700" style={{ maxHeight: 160 }}>
-                                    {courtroomChat.map((msg, idx) => (
-                                      <div key={idx}><span className="font-semibold text-blue-700">{msg.sender}</span>: {msg.message} <span className="text-gray-400">({msg.time})</span></div>
-                                    ))}
-                                  </div>
-                                  <form className="flex gap-2 mb-2" onSubmit={e => { e.preventDefault(); const val = e.target.elements.msg.value; const recipient = e.target.elements.recipient.value; if (val) { handleCourtroomSend(val + (recipient ? ` (private to ${recipient})` : ''), userRoles[caseDetails.id] || profile.name); setCurrentSpeaker(userRoles[caseDetails.id] || profile.name); e.target.reset(); } }}>
-                                    <input name="msg" className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs" placeholder="Type a message..." />
-                                    <select name="recipient" className="border border-gray-300 rounded px-2 py-1 text-xs">
-                                      <option value="">To All</option>
-                                      {getCaseAgents(caseDetails).map(a => (
-                                        <option key={a.role} value={a.role}>{a.role}</option>
-                                      ))}
-                                    </select>
-                                    <button type="submit" className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-xs">Send</button>
-                                  </form>
-                                  <div className="mb-2 text-xs text-gray-500">Select a recipient for private messages, or leave as 'To All'.</div>
-                                  <button className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400 mt-4" onClick={() => setShowCourtroom(false)}>Close</button>
-                                </div>
-                              </div>
-                            </Modal>
-                          )}
-                        </>
-                      ) : (
-                        <div className="flex gap-2 mt-4">
-                          <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700" onClick={() => { setJoinedCases(jc => [...jc, caseDetails.id]); showToast('You joined the case!'); }}>Join Case</button>
-                          <button className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400" onClick={() => setCaseDetails(null)}>Close</button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </Modal>
-            )}
-            {/* Profile & Progress */}
-            <div className="bg-white rounded shadow p-4 flex flex-col md:flex-row gap-6 items-center">
-              <div className="relative">
-              <img src={profile.avatar} alt="avatar" className="w-20 h-20 rounded-full border-4 border-blue-100" />
-                <button
-                  className="absolute bottom-0 right-0 bg-blue-600 text-white rounded-full p-1 shadow hover:bg-blue-700"
-                  title="Edit Profile"
-                  onClick={() => setShowEditProfileModal(true)}
-                  style={{ fontSize: 16 }}
-                >
-                  ✏️
-                </button>
-              </div>
-              <div className="flex-1">
-                <div className="text-xl font-bold text-gray-800">{profile.name}</div>
-                <div className="text-sm text-gray-500 mb-2">Role: {profile.role}</div>
-                <div className="flex gap-4 mb-2 items-center">
-                  <div>Ongoing Cases: <span className="inline-block bg-blue-600 text-white rounded-full px-3 py-1 text-xs font-semibold ml-1">{activeCases.length}</span></div>
-                  <div>Completed: <span className="inline-block bg-green-600 text-white rounded-full px-3 py-1 text-xs font-semibold ml-1">3</span></div>
-                </div>
-                {/* Styled Skills Card */}
-                <div className="mb-2">Skill Improvement:</div>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {skills.map(skill => (
-                    <div key={skill.name} className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 flex flex-col items-center w-32 shadow-sm">
-                      <span className="text-xs text-blue-700 font-semibold mb-1">{skill.name}</span>
-                      <div className="w-full bg-gray-200 rounded h-2 mb-1">
-                        <div className="bg-blue-600 h-2 rounded" style={{ width: skill.value + '%' }}></div>
-                      </div>
-                      <span className="text-xs text-gray-700">{skill.value}%</span>
-                    </div>
-                  ))}
-                    </div>
-                <div className="mt-2 flex gap-2 flex-wrap">
-                  {badges.map(b => (
-                    <span key={b.name} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-semibold">{b.icon} {b.name}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-            {/* Active Cases with Avatars - styled card */}
-            <div className="bg-white rounded-2xl shadow-lg p-6 mb-4 border border-blue-100">
-              <div className="font-bold mb-4 text-lg text-blue-800 flex items-center gap-2">
-                <span className="text-2xl">📂</span> Active Cases
-              </div>
-              <ul className="space-y-3">
-                {activeCases.map(c => (
-                  <li key={c.id} className="flex items-center justify-between bg-blue-50 rounded-xl px-4 py-3 shadow-sm border border-blue-200 hover:shadow-md transition-all cursor-pointer" onClick={() => setCaseDetails(c)}>
-                    <div className="flex items-center gap-3">
-                      {/* Case Avatar */}
-                      <div style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: '50%',
-                        background: '#4f46e5',
-                        color: '#fff',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 'bold',
-                        fontSize: 18,
-                        boxShadow: '0 1px 4px rgba(0,0,0,0.08)'
-                      }}>{c.name.charAt(0)}</div>
-                      <div>
-                        <div className="font-semibold text-blue-700 text-base">{c.name}</div>
-                        <div className="text-xs text-gray-500">{c.type} • {c.area} • {c.location}</div>
-                        {c.storyline && <div className="text-xs text-gray-600 mt-1 italic">{c.storyline}</div>}
-                      </div>
-                    </div>
-                    <div className="text-xs text-gray-500 text-right">
-                      <div>Role: <span className="font-semibold text-blue-700">{c.role}</span></div>
-                      <div>Deadline: {c.deadline}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            {/* Uploaded Cases with Evidence */}
-            <div className="bg-white rounded-2xl shadow-lg p-6 border border-blue-100">
-              <div className="font-bold mb-4 text-lg text-blue-800 flex items-center gap-2">
-                <span className="text-2xl">🧾</span> Uploaded Case Files
-              </div>
-              <ul className="space-y-3">
-                {uploadedCases.map(c => (
-                  <li key={c.id} className="bg-blue-50 rounded-xl px-4 py-3 shadow-sm border border-blue-200 hover:shadow-md transition-all">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: '50%',
-                        background: '#6366f1',
-                        color: '#fff',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 'bold',
-                        fontSize: 18,
-                        boxShadow: '0 1px 4px rgba(0,0,0,0.08)'
-                      }}>{c.name.charAt(0)}</div>
-                      <div>
-                        <div className="font-semibold text-blue-700 text-base">{c.name}</div>
-                        <div className="text-xs text-gray-500">{c.type} • Evidence: {c.evidence}</div>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-3 mb-2">
-                      {(evidence[c.id] || []).map(ev => (
-                        <div key={ev.id} className="bg-white border rounded p-2 flex flex-col items-center w-32 shadow-sm">
-                          <div className="font-medium text-gray-800 text-xs mb-1">{ev.name}</div>
-                          {ev.type === 'image' && <img src={ev.url} alt={ev.name} className="w-20 h-14 object-cover rounded mb-1" />}
-                          {ev.type === 'video' && <video src={ev.url} controls className="w-20 h-14 rounded mb-1" />}
-                          {ev.type === 'document' && <img src={ev.url} alt={ev.name} className="w-20 h-14 object-cover rounded mb-1" />}
-                          {ev.type === 'text' && <div className="text-xs text-gray-600 italic">{ev.text}</div>}
-                        </div>
-                      ))}
-                    </div>
-                    <form className="flex items-center gap-2" onSubmit={e => {
-                      e.preventDefault();
-                      const file = e.target.elements.evidence.files[0];
-                      const tags = e.target.elements.tags.value.split(',').map(t => t.trim()).filter(Boolean);
-                      const relevance = e.target.elements.relevance.value;
-                      handleUploadEvidence(c.id, file, tags, relevance);
-                      e.target.reset();
-                    }}>
-                      <input type="file" name="evidence" className="text-xs" accept="image/*,video/*,.pdf,.doc,.docx,.txt" />
-                      <input type="text" name="tags" placeholder="tags (comma separated)" className="text-xs border rounded px-1" />
-                      <select name="relevance" className="text-xs border rounded px-1">
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                      </select>
-                      <button type="submit" className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700">Upload Evidence</button>
-                    </form>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            {showEditProfileModal && (
-              <Modal open={true} onClose={() => setShowEditProfileModal(false)} title="Edit Profile" type="info" wide={false}>
-                <EditProfileModal profile={profile} onSave={handleSaveProfile} onClose={() => setShowEditProfileModal(false)} />
-              </Modal>
-            )}
-                </div>
-        );
+        return <OverviewSection
+          profile={profile}
+          activeCases={activeCases}
+          uploadedCases={uploadedCases}
+          evidence={demoEvidence}
+          skills={skills}
+          badges={badges}
+          showOnboarding={showNewCaseModal}
+          setShowOnboarding={setShowNewCaseModal}
+          handleCompleteOnboarding={handleCompleteOnboarding}
+          handleSaveProfile={handleSaveProfile}
+          handleUploadEvidence={handleUploadEvidence}
+          setCaseDetails={setCaseDetails}
+          setJoinedCases={setJoinedCases}
+          showToast={showToast}
+          setUserRoles={setUserRoles}
+          addNotification={addNotification}
+          setCaseInteractions={setCaseInteractions}
+          userRoles={userRoles}
+          getCaseAgents={getCaseAgents}
+          roleNextSteps={roleNextSteps}
+          calendarEvents={calendarEvents}
+          handleAddEvent={handleAddEvent}
+          handleCaseTwist={handleCaseTwist}
+          setShowCourtroom={setShowCourtroom}
+          courtroomTimeline={courtroomTimeline}
+          courtroomChat={courtroomChat}
+          handleCourtroomSend={handleCourtroomSend}
+          currentSpeaker={currentSpeaker}
+          setCurrentSpeaker={setCurrentSpeaker}
+          preCourtChat={preCourtChat}
+          preCourtRecipient={preCourtRecipient}
+          setPreCourtRecipient={setPreCourtRecipient}
+          handlePreCourtSend={handlePreCourtSend}
+          caseInteractions={caseInteractions}
+          joinedCases={joinedCases}
+          handleJoinCase={handleJoinCase}
+          onUpdateRole={handleUpdateRole}
+          onAddInteraction={handleAddInteraction}
+          onAddEvidence={handleAddEvidence}
+        />;
       case 'cases':
-        return (
-          <div className="p-4 space-y-6">
-            {/* Active Cases */}
-            <div className="bg-white rounded shadow p-4 mb-4">
-              <div className="font-bold mb-2">Active Cases</div>
-              <ul>
-                {activeCases.map(c => (
-                  <li key={c.id} className="flex items-center justify-between border-b py-2">
-                    <div>
-                      <span className="font-semibold text-blue-700">{c.name}</span> <span className="text-xs text-gray-500">({c.role})</span>
-                    </div>
-                    <div className="text-xs text-gray-500">Deadline: {c.deadline}</div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            {/* Uploaded Cases */}
-            <div className="bg-white rounded shadow p-4">
-              <div className="font-bold mb-2">Uploaded Case Files</div>
-              <ul>
-                {uploadedCases.map(c => (
-                  <li key={c.id} className="flex items-center justify-between border-b py-2">
-                    <span>{c.name}</span>
-                    <span className="text-xs text-gray-500">Evidence: {c.evidence}</span>
-                  </li>
-                ))}
-              </ul>
-              <button className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700" onClick={() => setShowNewCaseModal(true)}>New Case</button>
-              {showNewCaseModal && (
-                <Modal open={true} onClose={() => setShowNewCaseModal(false)} title="Create New Case" type="info" wide={true}>
-                  <NewCaseModal onCreate={handleCreateCase} onClose={() => setShowNewCaseModal(false)} />
-                </Modal>
-              )}
-            </div>
-          </div>
-        );
+        return <CasesSection
+          activeCases={activeCases}
+          uploadedCases={uploadedCases}
+          setShowNewCaseModal={setShowNewCaseModal}
+          showNewCaseModal={showNewCaseModal}
+          handleCreateCase={handleCreateCase}
+          historicalCases={[...historicalCases, ...activeCases]}
+          updateCaseStatus={updateCaseStatus}
+          handleCaseProgression={handleCaseProgression}
+          caseProgressionSteps={caseProgressionSteps}
+        />;
       case 'ai':
-        return (
-          <div className="p-4 space-y-6">
-            {/* Case Selection (if multiple cases) */}
-            <div className="bg-white rounded shadow p-4 mb-4">
-              <div className="font-bold mb-2">Select Case</div>
-              <div className="flex gap-2 flex-wrap">
-                {demoActiveCases.map(c => (
-                  <button
-                    key={c.id}
-                    className={`px-3 py-2 rounded border ${currentCaseId === c.id ? 'bg-blue-100 border-blue-600' : 'border-gray-200'} hover:bg-blue-50`}
-                    onClick={() => setCurrentCaseId(c.id)}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Role Selection */}
-            <div className="bg-white rounded shadow p-4 mb-4">
-              <div className="font-bold mb-2">Select Role</div>
-              <div className="flex gap-2 flex-wrap">
-                {demoAgents.map(agent => (
-                  <button key={agent.role} className={`flex items-center gap-2 px-3 py-2 rounded border ${selectedAgent.role === agent.role ? 'bg-blue-100 border-blue-600' : 'border-gray-200'} hover:bg-blue-50`} onClick={() => setSelectedAgent(agent)}>
-                    <span className="text-2xl">{agentIcons[agent.role]}</span>
-                    <span>{agent.role}</span>
-                  </button>
-                ))}
-              </div>
-                    </div>
-            {/* Only allow chat if user is joined to the selected case */}
-            {joinedCases.includes(currentCaseId) ? (
-            <div className="bg-white rounded shadow p-4">
-              <div className="font-bold mb-2">AI Agent Chat ({selectedAgent.role})</div>
-                <div className="flex gap-2 mb-2">
-                  <button className="bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 text-xs font-semibold" onClick={() => handleSendChat('Can you answer this question?')}>Question</button>
-                  <button className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded hover:bg-yellow-200 text-xs font-semibold" onClick={() => handleSendChat('Objection!')}>Object</button>
-                  <button className="bg-green-100 text-green-700 px-3 py-1 rounded hover:bg-green-200 text-xs font-semibold" onClick={() => handleSendChat('Here is my argument...')}>Make Argument</button>
-                </div>
-              <div className="bg-gray-50 rounded p-3 mb-2 h-40 overflow-y-auto flex flex-col gap-1">
-                  {(chat[currentCaseId]?.[selectedAgent.role] || []).map((msg, idx) => (
-                  <div key={idx} className={msg.sender === 'You' ? 'text-right' : 'text-left'}>
-                    <span className={`inline-block px-2 py-1 rounded ${msg.sender === 'You' ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700'}`}>{msg.sender}: {msg.text}</span>
-                  </div>
-                ))}
-              </div>
-              <form className="flex gap-2" onSubmit={e => { e.preventDefault(); handleSendChat(e.target.chat.value); e.target.reset(); }}>
-                <input name="chat" className="flex-1 border border-gray-300 rounded px-2 py-1" placeholder={`Ask ${selectedAgent.role} a question...`} />
-                <button type="submit" className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">Send</button>
-              </form>
-            </div>
-            ) : (
-              <div className="bg-white rounded shadow p-4 text-center text-gray-500">Join a case to access chat and participate.</div>
-            )}
-          </div>
-        );
-      case 'feedback':
-        return (
-          <div className="p-4 space-y-6">
-            <div className="bg-white rounded shadow p-4 mb-4">
-              <div className="font-bold mb-2">Live Feedback</div>
-              <div className="mb-2">Legal Arguments: <span className="text-green-700">Excellent</span></div>
-              <div className="mb-2">Objection Handling: <span className="text-yellow-700">Needs Improvement</span></div>
-              <div className="mb-2">Case Handling: <span className="text-blue-700">Good</span></div>
-              <button className="mt-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700" onClick={handleViewScore}>View Score Report</button>
-                      </div>
-            <div className="bg-white rounded shadow p-4">
-              <div className="font-bold mb-2">Suggestions for Improvement</div>
-              <ul className="list-disc ml-6 text-sm text-gray-700">
-                <li>Practice objection handling in the simulation tools.</li>
-                <li>Review cross-examination guides in Learning Resources.</li>
-                <li>Participate in group practice for peer feedback.</li>
-              </ul>
-                      </div>
-                    </div>
-        );
+        return <JudgeMatchingSystem />;
       case 'evidence':
-        return (
-          <div className="p-4 space-y-6">
-            <div className="bg-white rounded shadow p-4 mb-4">
-              <div className="font-bold mb-2">Evidence Uploads</div>
-              {/* Evidence Filter Bar */}
-              <div className="flex gap-2 mb-4">
-                <input
-                  className="border border-gray-300 rounded px-2 py-1 text-xs"
-                  placeholder="Filter by tag..."
-                  value={evidenceFilter.tag}
-                  onChange={e => setEvidenceFilter(f => ({ ...f, tag: e.target.value }))}
-                />
-                <select
-                  className="border border-gray-300 rounded px-2 py-1 text-xs"
-                  value={evidenceFilter.relevance}
-                  onChange={e => setEvidenceFilter(f => ({ ...f, relevance: e.target.value }))}
-                >
-                  <option value="">All Relevance</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                </select>
-                {compareEvidence.length === 2 && (
-                  <button className="bg-purple-600 text-white px-3 py-1 rounded text-xs hover:bg-purple-700" onClick={() => setShowCompareModal(true)}>
-                    Compare Selected ({compareEvidence.length})
-                  </button>
-                )}
-                {compareEvidence.length > 0 && (
-                  <button className="bg-gray-300 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-400" onClick={() => setCompareEvidence([])}>
-                    Clear Selection
-                  </button>
-                )}
-              </div>
-              <div className="flex gap-4 flex-wrap">
-                {demoEvidence
-                  .filter(ev =>
-                    (!evidenceFilter.tag || (ev.tags && ev.tags.some(t => t.toLowerCase().includes(evidenceFilter.tag.toLowerCase())))) &&
-                    (!evidenceFilter.relevance || ev.relevance === evidenceFilter.relevance)
-                  )
-                  .map(ev => (
-                    <div key={ev.id} className={`bg-gray-50 border rounded shadow p-2 w-40 flex flex-col items-center ${compareEvidence.some(e => e.id === ev.id) ? 'ring-2 ring-purple-600' : ''}`}>
-                    <div className="font-medium text-gray-800 text-sm mb-1">{ev.name}</div>
-                    {ev.type === 'image' && <img src={ev.url} alt={ev.name} className="w-24 h-16 object-cover rounded mb-2" onClick={() => handleViewEvidence(ev)} style={{ cursor: 'pointer' }} />}
-                    {ev.type === 'document' && <img src={ev.url} alt={ev.name} className="w-24 h-16 object-cover rounded mb-2" onClick={() => handleViewEvidence(ev)} style={{ cursor: 'pointer' }} />}
-                    {ev.type === 'video' && <video src={ev.url} controls className="w-24 h-16 rounded mb-2" onClick={() => handleViewEvidence(ev)} style={{ cursor: 'pointer' }} />}
-                      <div className="text-xs text-gray-500 mb-1">Tags: {ev.tags?.join(', ') || 'None'}</div>
-                      <div className="text-xs text-gray-500 mb-1">Relevance: {ev.relevance || 'N/A'}</div>
-                      <button
-                        className={`mt-1 px-2 py-1 rounded text-xs ${compareEvidence.some(e => e.id === ev.id) ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-                        onClick={() => {
-                          setCompareEvidence(sel => {
-                            if (sel.some(e => e.id === ev.id)) return sel.filter(e => e.id !== ev.id);
-                            if (sel.length < 2) return [...sel, ev];
-                            return sel;
-                          });
-                        }}
-                        disabled={compareEvidence.length === 2 && !compareEvidence.some(e => e.id === ev.id)}
-                      >
-                        {compareEvidence.some(e => e.id === ev.id) ? 'Selected' : 'Select for Compare'}
-                      </button>
-                  </div>
-                ))}
-              </div>
-              {/* Only allow evidence upload if user is joined to any case */}
-              {joinedCases.length > 0 ? (
-              <button className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Upload Evidence</button>
-              ) : (
-                <div className="mt-4 text-gray-500 text-center">Join a case to upload evidence.</div>
-              )}
-            </div>
-            <div className="bg-white rounded shadow p-4">
-              <div className="font-bold mb-2">Evidence Viewer</div>
-              <div className="text-sm text-gray-500">Click on any evidence item to view details.</div>
-                    </div>
-            {/* Evidence Comparison Modal */}
-            {showCompareModal && (
-              <Modal open={true} onClose={() => setShowCompareModal(false)} title="Compare Evidence" type="info" wide={true}>
-                <div className="flex gap-8">
-                  {compareEvidence.map(ev => (
-                    <div key={ev.id} className="flex-1 min-w-[200px] max-w-xs bg-gray-50 rounded-lg shadow p-4">
-                      <div className="font-bold mb-2">{ev.name}</div>
-                      {ev.type === 'image' && <img src={ev.url} alt={ev.name} className="w-full rounded mb-2" />}
-                      {ev.type === 'document' && <img src={ev.url} alt={ev.name} className="w-full rounded mb-2" />}
-                      {ev.type === 'video' && <video src={ev.url} controls className="w-full rounded mb-2" />}
-                      <div className="text-xs text-gray-500 mb-1">Tags: {ev.tags?.join(', ') || 'None'}</div>
-                      <div className="text-xs text-gray-500 mb-1">Relevance: {ev.relevance || 'N/A'}</div>
-                      <div className="text-xs text-gray-500 mb-1">Chain of Custody:</div>
-                      <ul className="text-xs text-gray-700 pl-4 list-disc mb-2">
-                        {ev.chainOfCustody?.map((log, idx) => (
-                          <li key={idx}>{log.action} by {log.user} at {log.timestamp}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </Modal>
-            )}
-                  </div>
-        );
-      case 'simulation':
-        return (
-          <div className="p-4 space-y-6">
-            <div className="bg-white rounded shadow p-4 mb-4 flex flex-col md:flex-row gap-4 items-center">
-              <div className="flex-1">
-                <div className="font-bold mb-2">Courtroom Controls</div>
-                <div className="flex gap-2 mb-2">
-                  <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Start</button>
-                  <button className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">Pause</button>
-                  <button className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">Restart</button>
-                  <button className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">⏩ Fast-Forward</button>
-                  <button className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">⏪ Rewind</button>
-                </div>
-                <button className="mt-2 bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700" onClick={handleCaseTwist}>Case Twist Generator</button>
-              </div>
-              <div className="flex-1">
-                <div className="font-bold mb-2">Simulation Preview</div>
-                <div className="aspect-video bg-gray-200 rounded-lg flex items-center justify-center text-gray-400">Simulation Video/Preview</div>
-                        </div>
-                        </div>
-                      </div>
-        );
+        return <EvidenceSection
+          demoEvidence={demoEvidence}
+          evidenceFilter={evidenceFilter}
+          setEvidenceFilter={setEvidenceFilter}
+          compareEvidence={compareEvidence}
+          setCompareEvidence={setCompareEvidence}
+          setShowCompareModal={setShowCompareModal}
+          showCompareModal={showCompareModal}
+          handleViewEvidence={handleViewEvidence}
+          joinedCases={joinedCases}
+        />;
+      case 'feedback':
+        return <FeedbackSection />;
       case 'learning':
-        return (
-          <div className="p-4 space-y-6">
-            <div className="bg-white rounded shadow p-4 mb-4">
-              <div className="font-bold mb-2">Tutorials & Guides</div>
-              <ul className="list-disc ml-6 text-sm text-blue-700">
-                <li><a href="#">Video: How to Handle Objections</a></li>
-                <li><a href="#">Case Study: Landmark Supreme Court Case</a></li>
-                <li><a href="#">Guide: Building Persuasive Arguments</a></li>
-              </ul>
-            </div>
-            <div className="bg-white rounded shadow p-4">
-              <div className="font-bold mb-2">Case Library</div>
-              <ul className="list-disc ml-6 text-sm text-blue-700">
-                <li><a href="#">Historical Case: Brown v. Board of Education</a></li>
-                <li><a href="#">AI-Generated Case: The Missing Brief</a></li>
-              </ul>
-                    </div>
-                  </div>
-        );
+        return <LearningSection />;
       case 'community':
-        return (
-          <div className="p-4 space-y-6">
-            <div className="bg-white rounded shadow p-4 mb-4">
-              <div className="font-bold mb-2">Group Practice</div>
-              <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Join Practice Group</button>
-            </div>
-            <div className="bg-white rounded shadow p-4 mb-4">
-              <div className="font-bold mb-2">Forum & Q&A</div>
-              {demoForumLinks.map(link => (
-                <a key={link.href} href={link.href} className="block text-blue-700 underline mb-1">{link.label}</a>
-              ))}
-                    </div>
-            <div className="bg-white rounded shadow p-4">
-              <div className="font-bold mb-2">Mentorship</div>
-              {demoMentorship.map(m => (
-                <div key={m.name} className="flex items-center gap-2 mb-2">
-                  <img src={m.avatar} alt={m.name} className="w-8 h-8 rounded-full" />
-                  <div>
-                    <div className="font-medium text-gray-800">{m.name}</div>
-                    <div className="text-xs text-gray-500">{m.role}</div>
-                  </div>
-                  <button className="ml-2 bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 text-xs">Connect</button>
-                </div>
-              ))}
-                    </div>
-                  </div>
-        );
-      case 'notifications':
-        return (
-          <div className="p-4 space-y-6">
-            <div className="bg-white rounded shadow p-4 mb-4">
-              <div className="font-bold mb-2">Case Updates</div>
-              <ul>
-                {notifications.filter(n => n.type === 'case').map(n => (
-                  <li key={n.id} className="mb-1 text-sm text-gray-700">{n.message} <span className="text-xs text-gray-400">({n.date})</span></li>
-                ))}
-              </ul>
-                </div>
-            <div className="bg-white rounded shadow p-4">
-              <div className="font-bold mb-2">System Announcements</div>
-              <ul>
-                {notifications.filter(n => n.type === 'system').map(n => (
-                  <li key={n.id} className="mb-1 text-sm text-gray-700">{n.message} <span className="text-xs text-gray-400">({n.date})</span></li>
-                ))}
-              </ul>
-              </div>
-          </div>
-        );
+        return <CommunitySection />;
       default:
-        return <div className="p-4">Section not found.</div>;
+        return <OverviewSection
+          profile={profile}
+          activeCases={activeCases}
+          uploadedCases={uploadedCases}
+          evidence={demoEvidence}
+          skills={skills}
+          badges={badges}
+          showOnboarding={showNewCaseModal}
+          setShowOnboarding={setShowNewCaseModal}
+          handleCompleteOnboarding={handleCompleteOnboarding}
+          handleSaveProfile={handleSaveProfile}
+          handleUploadEvidence={handleUploadEvidence}
+          setCaseDetails={setCaseDetails}
+          setJoinedCases={setJoinedCases}
+          showToast={showToast}
+          setUserRoles={setUserRoles}
+          addNotification={addNotification}
+          setCaseInteractions={setCaseInteractions}
+          userRoles={userRoles}
+          getCaseAgents={getCaseAgents}
+          roleNextSteps={roleNextSteps}
+          calendarEvents={calendarEvents}
+          handleAddEvent={handleAddEvent}
+          handleCaseTwist={handleCaseTwist}
+          setShowCourtroom={setShowCourtroom}
+          courtroomTimeline={courtroomTimeline}
+          courtroomChat={courtroomChat}
+          handleCourtroomSend={handleCourtroomSend}
+          currentSpeaker={currentSpeaker}
+          setCurrentSpeaker={setCurrentSpeaker}
+          preCourtChat={preCourtChat}
+          preCourtRecipient={preCourtRecipient}
+          setPreCourtRecipient={setPreCourtRecipient}
+          handlePreCourtSend={handlePreCourtSend}
+          caseInteractions={caseInteractions}
+          joinedCases={joinedCases}
+          handleJoinCase={handleJoinCase}
+          onUpdateRole={handleUpdateRole}
+          onAddInteraction={handleAddInteraction}
+          onAddEvidence={handleAddEvidence}
+        />;
     }
   }
 
@@ -1395,44 +984,6 @@ export default function Dashboard() {
     setEvidence(prev => ({ ...prev, [caseId]: [...(prev[caseId] || []), newEv] }));
     showToast('Evidence uploaded!');
   };
-
-  // Toast notification component
-  function Toast({ message, onClose }) {
-    if (!message) return null;
-    return (
-      <div className="fixed top-6 right-6 z-50 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-fadeIn">
-        <span className="text-xl">✔️</span>
-        <span>{message}</span>
-        <button className="ml-2 text-white text-lg" onClick={onClose}>&times;</button>
-      </div>
-    );
-  }
-
-  // Helper to show toast for 2.5s
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 2500);
-  };
-
-  // Helper to get agents for a case (including user if joined, with their chosen role)
-  function getCaseAgents(caseObj) {
-    const baseAgents = [
-      { role: 'Judge', name: 'AI Judge', avatar: agentIcons['Judge'] },
-      { role: 'Prosecutor', name: 'AI Prosecutor', avatar: agentIcons['Prosecutor'] },
-      { role: 'Defense Attorney', name: 'AI Defense', avatar: agentIcons['Defense'] },
-      { role: 'Clerk', name: 'AI Clerk', avatar: agentIcons['Clerk'] },
-      { role: 'Defendant', name: 'AI Defendant', avatar: agentIcons['Defendant'] },
-      { role: 'Witness', name: 'AI Witness', avatar: agentIcons['Witness'] },
-      { role: 'Observer', name: 'AI Observer', avatar: '👀' },
-    ];
-    // Insert user as an agent with their chosen role if joined
-    return [
-      ...(joinedCases.includes(caseObj.id) && userRoles[caseObj.id]
-        ? [{ role: userRoles[caseObj.id], name: profile.name, avatar: <img src={profile.avatar} alt="avatar" className="w-8 h-8 rounded-full" /> }]
-        : []),
-      ...baseAgents.filter(a => a.role !== userRoles[caseObj.id])
-    ];
-  }
 
   // Courtroom roles and next steps
   const allCourtRoles = ['Judge', 'Prosecutor', 'Defense Attorney', 'Clerk', 'Defendant', 'Witness', 'Observer'];
@@ -1546,22 +1097,173 @@ export default function Dashboard() {
 
   // Add state for evidence filter and comparison
   const [evidenceFilter, setEvidenceFilter] = useState({ tag: '', relevance: '' });
-  const [compareEvidence, setCompareEvidence] = useState([]); // array of evidence objects
+  const [compareEvidence, setCompareEvidence] = useState([]);
   const [showCompareModal, setShowCompareModal] = useState(false);
 
+  // Add state for evidence handling
+  const [demoEvidence, setDemoEvidence] = useState([
+    {
+      id: 1,
+      name: 'Document 1',
+      type: 'document',
+      url: 'https://example.com/doc1.pdf',
+      tags: ['contract', 'agreement'],
+      relevance: 'high'
+    },
+    {
+      id: 2,
+      name: 'Image 1',
+      type: 'image',
+      url: 'https://example.com/img1.jpg',
+      tags: ['evidence', 'photo'],
+      relevance: 'medium'
+    }
+  ]);
+
+  // Add function to handle joining a case
+  const handleJoinCase = (caseId) => {
+    setJoinedCases(prev => [...prev, caseId]);
+    showToast('You have joined the case.');
+  };
+
+  const handleUpdateRole = (caseId, newRole) => {
+    setJoinedCases(prevCases => 
+      prevCases.map(caseItem => 
+        caseItem.id === caseId 
+          ? { ...caseItem, userRole: newRole }
+          : caseItem
+      )
+    );
+  };
+
+  const handleAddInteraction = (caseId, interaction) => {
+    setJoinedCases(prevCases =>
+      prevCases.map(caseItem =>
+        caseItem.id === caseId
+          ? {
+              ...caseItem,
+              interactions: [...(caseItem.interactions || []), interaction]
+            }
+          : caseItem
+      )
+    );
+  };
+
+  const handleAddEvidence = (caseId, evidence) => {
+    setJoinedCases(prevCases =>
+      prevCases.map(caseItem =>
+        caseItem.id === caseId
+          ? {
+              ...caseItem,
+              evidence: [...(caseItem.evidence || []), evidence]
+            }
+          : caseItem
+      )
+    );
+  };
+
+  // Handler to complete onboarding
+  const handleCompleteOnboarding = (data) => {
+    localStorage.setItem('kesi-onboarded', 'true');
+    setShowNewCaseModal(false);
+    // Optionally update user profile with onboarding data
+    // if (data) { setProfile(prev => ({ ...prev, ...data })); }
+  };
+
+  // Add getCaseAgents function
+  const getCaseAgents = (caseObj) => {
+    // Mock implementation: return a list of agents for the given case
+    return [
+      { role: 'Judge', name: 'AI Judge', icon: agentIcons['Judge'] },
+      { role: 'Prosecutor', name: 'AI Prosecutor', icon: agentIcons['Prosecutor'] },
+      { role: 'Defense', name: 'AI Defense', icon: agentIcons['Defense'] },
+      { role: 'Clerk', name: 'AI Clerk', icon: agentIcons['Clerk'] },
+      { role: 'Defendant', name: 'AI Defendant', icon: agentIcons['Defendant'] },
+      { role: 'Witness', name: 'AI Witness', icon: agentIcons['Witness'] },
+    ];
+  };
+
   return (
-    <div className="min-h-screen flex bg-gradient-to-b from-blue-50 to-white">
-      <Toast message={toast} onClose={() => setToast('')} />
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-h-screen">
-        <Topbar />
-        <main className="flex-1 overflow-y-auto">
-          <SectionPanel />
-        </main>
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <h1 className="text-xl font-semibold text-gray-800">KESI Dashboard</h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-600">{user?.username || profile?.name}</span>
+              <img
+                src={profile?.avatar || 'https://randomuser.me/api/portraits/men/32.jpg'}
+                alt="Profile"
+                className="h-8 w-8 rounded-full"
+              />
+              </div>
+          </div>
+        </div>
+      </nav>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Navigation Tabs */}
+        <div className="mb-6">
+          <nav className="flex space-x-4">
+            {sections.map((s) => (
+                  <button
+                key={s.id}
+                onClick={() => setSection(s.id)}
+                className={`px-3 py-2 rounded-md text-sm font-medium ${
+                  section === s.id
+                    ? 'bg-blue-500 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+                  >
+                <span className="mr-2">{s.icon}</span>
+                {s.name}
+                  </button>
+                ))}
+              </nav>
+        </div>
+
+        {/* Main Content */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+                <ErrorBoundary>
+                  <SectionPanel />
+                </ErrorBoundary>
+        </div>
       </div>
-      <Modal open={modal.open} onClose={closeModal} title={modal.title} type={modal.type} wide={modal.wide}>
-        {modal.content}
-      </Modal>
+
+      {/* Modals */}
+      {modal.open && (
+        <Modal
+          open={modal.open}
+          onClose={closeModal}
+          title={modal.title}
+          type={modal.type}
+          wide={modal.wide}
+        >
+          {modal.content}
+        </Modal>
+      )}
+
+      {showNewCaseModal && (
+        <Modal
+          open={showNewCaseModal}
+          onClose={() => setShowNewCaseModal(false)}
+          title="Create New Case"
+          wide={true}
+        >
+        <NewCaseModal
+          onCreate={handleCreateCase}
+          onClose={() => setShowNewCaseModal(false)}
+        />
+        </Modal>
+      )}
+
+      {/* Toast Notifications */}
+      <Toast
+        message={modal.content}
+        onClose={() => setModal({ ...modal, content: null })}
+      />
     </div>
   );
 } 

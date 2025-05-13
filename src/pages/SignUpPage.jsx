@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const SignUpPage = () => {
   const [formData, setFormData] = useState({
@@ -14,6 +15,7 @@ const SignUpPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const navigate = useNavigate();
+  const { register } = useAuth();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -28,35 +30,49 @@ const SignUpPage = () => {
     setIsLoading(true);
     setError('');
     setSuccess('');
-    // Demo: check if user exists
-    const user = JSON.parse(localStorage.getItem('kesi-user'));
-    if (user && user.email === formData.email) {
-      setIsLoading(false);
-      setError('User already exists. Please login.');
-      return;
-    }
     if (formData.password !== formData.confirmPassword) {
       setIsLoading(false);
       setError('Passwords do not match.');
       return;
     }
-    // Save user to localStorage
-    localStorage.setItem('kesi-user', JSON.stringify({
-      email: formData.email,
-      password: formData.password,
-      skillLevel: formData.skillLevel,
-      jurisdiction: formData.jurisdiction,
-      rolePreference: formData.rolePreference,
-    }));
-    setIsLoading(false);
-    setSuccess('Account created! Redirecting to login...');
-    setTimeout(() => navigate('/login'), 1200);
+    try {
+      await register({
+        username: formData.email.split('@')[0],
+        email: formData.email,
+        password: formData.password,
+        role: formData.rolePreference,
+      });
+      setSuccess('Account created! Redirecting to login...');
+      setTimeout(() => navigate('/login'), 1200);
+    } catch (err) {
+      setError(err.message || 'Registration failed.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex">
+      {/* Left side - Image */}
+      <div className="hidden lg:block lg:w-1/2 relative">
+        <img
+          src="/steptodown.com649219.jpg"
+          alt="Legal Background"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-blue-900/50"></div>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-white text-center p-8">
+            <h2 className="text-4xl font-bold mb-4">Join KESI Today</h2>
+            <p className="text-lg">Start your journey to becoming a better legal professional</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Right side - Form */}
+      <div className="w-full lg:w-1/2 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          <h2 className="text-center text-3xl font-extrabold text-gray-900">
           Create your account
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
@@ -68,13 +84,14 @@ const SignUpPage = () => {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          <div className="bg-white py-8 px-4 shadow-xl rounded-lg sm:px-10">
           <form className="space-y-6" onSubmit={handleSubmit}>
-            {error && <div className="text-red-600 text-sm text-center">{error}</div>}
-            {success && <div className="text-green-600 text-sm text-center">{success}</div>}
-            <div className="flex flex-col md:flex-row md:items-center md:gap-4">
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 md:w-48 md:text-right md:mb-0 mb-1">Email address</label>
-              <div className="flex-1">
+              {error && <div className="text-red-600 text-sm text-center bg-red-50 p-3 rounded-lg">{error}</div>}
+              {success && <div className="text-green-600 text-sm text-center bg-green-50 p-3 rounded-lg">{success}</div>}
+              
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
+                <div className="mt-1">
                 <input
                   id="email"
                   name="email"
@@ -87,9 +104,10 @@ const SignUpPage = () => {
                 />
               </div>
             </div>
-            <div className="flex flex-col md:flex-row md:items-center md:gap-4">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 md:w-48 md:text-right md:mb-0 mb-1">Password</label>
-              <div className="flex-1">
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
+                <div className="mt-1">
                 <input
                   id="password"
                   name="password"
@@ -102,9 +120,10 @@ const SignUpPage = () => {
                 />
               </div>
             </div>
-            <div className="flex flex-col md:flex-row md:items-center md:gap-4">
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 md:w-48 md:text-right md:mb-0 mb-1">Confirm Password</label>
-              <div className="flex-1">
+
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">Confirm Password</label>
+                <div className="mt-1">
                 <input
                   id="confirmPassword"
                   name="confirmPassword"
@@ -117,9 +136,10 @@ const SignUpPage = () => {
                 />
               </div>
             </div>
-            <div className="flex flex-col md:flex-row md:items-center md:gap-4">
-              <label htmlFor="skillLevel" className="block text-sm font-medium text-gray-700 md:w-48 md:text-right md:mb-0 mb-1">Skill Level</label>
-              <div className="flex-1">
+
+              <div>
+                <label htmlFor="skillLevel" className="block text-sm font-medium text-gray-700">Skill Level</label>
+                <div className="mt-1">
                 <select
                   id="skillLevel"
                   name="skillLevel"
@@ -133,9 +153,10 @@ const SignUpPage = () => {
                 </select>
               </div>
             </div>
-            <div className="flex flex-col md:flex-row md:items-center md:gap-4">
-              <label htmlFor="jurisdiction" className="block text-sm font-medium text-gray-700 md:w-48 md:text-right md:mb-0 mb-1">Jurisdiction Preference</label>
-              <div className="flex-1">
+
+              <div>
+                <label htmlFor="jurisdiction" className="block text-sm font-medium text-gray-700">Jurisdiction Preference</label>
+                <div className="mt-1">
                 <select
                   id="jurisdiction"
                   name="jurisdiction"
@@ -149,9 +170,10 @@ const SignUpPage = () => {
                 </select>
               </div>
             </div>
-            <div className="flex flex-col md:flex-row md:items-center md:gap-4">
-              <label htmlFor="rolePreference" className="block text-sm font-medium text-gray-700 md:w-48 md:text-right md:mb-0 mb-1">Courtroom Role Preference</label>
-              <div className="flex-1">
+
+              <div>
+                <label htmlFor="rolePreference" className="block text-sm font-medium text-gray-700">Courtroom Role Preference</label>
+                <div className="mt-1">
                 <select
                   id="rolePreference"
                   name="rolePreference"
@@ -159,19 +181,18 @@ const SignUpPage = () => {
                   onChange={handleChange}
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="Prosecutor">Prosecutor</option>
-                  <option value="Defense">Defense</option>
-                  <option value="Judge">Judge</option>
-                  <option value="Clerk">Clerk</option>
-                  <option value="Observer">Observer</option>
+                  <option value="user">User</option>
+                  <option value="investigator">Investigator</option>
+                  <option value="admin">Admin</option>
                 </select>
               </div>
             </div>
+
             <div>
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
               >
                 {isLoading ? 'Creating account...' : 'Create account'}
               </button>
@@ -191,7 +212,7 @@ const SignUpPage = () => {
             <div className="mt-6">
               <button
                 type="button"
-                className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
               >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -200,6 +221,7 @@ const SignUpPage = () => {
                 </svg>
                 Connect Wallet
               </button>
+              </div>
             </div>
           </div>
         </div>

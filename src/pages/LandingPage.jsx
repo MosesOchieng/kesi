@@ -220,18 +220,26 @@ const LandingPage = () => {
       </nav>
 
       {/* Hero Section */}
-      <section className="flex-1 flex items-center justify-center py-10 md:py-24">
-        <div className="container max-w-screen-lg mx-auto px-4 sm:px-6 flex flex-col items-center text-center">
-          <h1 className="text-3xl sm:text-4xl md:text-6xl font-extrabold text-gray-900 mb-6 leading-tight">
+      <section className="relative flex-1 flex items-center justify-center py-10 md:py-24">
+        <div className="absolute inset-0 z-0">
+          <img 
+            src="/steptodown.com611962.jpg" 
+            alt="Courtroom Background" 
+            className="w-full h-full object-cover opacity-20"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-900/90 to-blue-800/90"></div>
+        </div>
+        <div className="container max-w-screen-lg mx-auto px-4 sm:px-6 flex flex-col items-center text-center relative z-10">
+          <h1 className="text-3xl sm:text-4xl md:text-6xl font-extrabold text-white mb-6 leading-tight">
             Master Legal Practice in a
-            <span className="block text-blue-700">Virtual Courtroom</span>
+            <span className="block text-blue-200">Virtual Courtroom</span>
           </h1>
-          <p className="text-base sm:text-lg md:text-xl text-gray-600 mb-10 max-w-2xl mx-auto">
+          <p className="text-base sm:text-lg md:text-xl text-blue-100 mb-10 max-w-2xl mx-auto">
             Experience realistic legal simulations, practice courtroom skills, and advance your legal career with KESI's immersive learning platform.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center w-full sm:w-auto">
-            <Link to="/signup" className="bg-blue-700 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-800 shadow transition w-full sm:w-auto">Start Learning</Link>
-            <a href="#about" className="border-2 border-blue-700 text-blue-700 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-50 transition w-full sm:w-auto">Learn More</a>
+            <Link to="/signup" className="bg-white text-blue-900 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-50 shadow-lg transition w-full sm:w-auto">Start Learning</Link>
+            <a href="#about" className="border-2 border-white text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-white/10 transition w-full sm:w-auto">Learn More</a>
           </div>
         </div>
       </section>

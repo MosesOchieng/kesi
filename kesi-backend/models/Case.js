@@ -1,13 +1,36 @@
-const mongoose = require('mongoose');
-const caseSchema = new mongoose.Schema({
-  title: String,
-  description: String,
-  type: { type: String, enum: ['ai', 'manual', 'historical'], default: 'manual' },
-  source: String, // for historical cases (e.g., reference link or summary)
-  participants: [{ user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, role: String }],
-  status: { type: String, default: 'Ongoing' },
-  evidence: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Evidence' }],
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
+
+const Case = sequelize.define('Case', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  title: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  description: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  status: {
+    type: DataTypes.ENUM('open', 'in_progress', 'closed', 'archived'),
+    defaultValue: 'open'
+  },
+  type: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  priority: {
+    type: DataTypes.ENUM('low', 'medium', 'high', 'urgent'),
+    defaultValue: 'medium'
+  },
+  metadata: {
+    type: DataTypes.JSON,
+    allowNull: true
+  }
 });
-module.exports = mongoose.model('Case', caseSchema); 
+
+module.exports = Case; 

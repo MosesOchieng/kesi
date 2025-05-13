@@ -1,0 +1,14 @@
+[
+  {
+    "case_name": "Republic v. XYZ",
+    "text": "The accused was charged with...",
+    "court": "High Court",
+    "date": "2020-03-04"
+  },
+  {
+    "case_name": "ABC v. State",
+    "text": "This case involves a dispute over...",
+    "court": "Court of Appeal",
+    "date": "2020-05-15"
+  }
+]

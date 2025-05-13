@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="256" cy="256" r="256" fill="#2563EB"/>
+  
+  <!-- Scales of Justice -->
+  <g transform="translate(128, 128) scale(0.5)">
+    <!-- Balance Beam -->
+    <path d="M256 96L96 256L416 256L256 96Z" fill="white"/>
+    
+    <!-- Left Scale -->
+    <path d="M96 256L96 416L176 416L176 256" stroke="white" stroke-width="24"/>
+    <circle cx="136" cy="416" r="40" fill="white"/>
+    
+    <!-- Right Scale -->
+    <path d="M416 256L416 416L336 416L336 256" stroke="white" stroke-width="24"/>
+    <circle cx="376" cy="416" r="40" fill="white"/>
+    
+    <!-- Center Support -->
+    <path d="M256 96L256 256" stroke="white" stroke-width="24"/>
+    <circle cx="256" cy="256" r="24" fill="white"/>
+  </g>
+  
+  <!-- KESI Text -->
+  <text x="256" y="480" font-family="Arial" font-size="48" font-weight="bold" fill="white" text-anchor="middle">KESI</text>
+</svg> 

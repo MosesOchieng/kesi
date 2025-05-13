@@ -1,13 +1,33 @@
 const jwt = require('jsonwebtoken');
+const { User } = require('../models');
 
-module.exports = function (req, res, next) {
-  const token = req.header('Authorization')?.replace('Bearer ', '');
-  if (!token) return res.status(401).json({ error: 'No token, authorization denied' });
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+
+const auth = async (req, res, next) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    if (!token) {
+      throw new Error();
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findByPk(decoded.id);
+
+    if (!user) {
+      throw new Error();
+    }
+
+    req.token = token;
+    req.user = user;
     next();
-  } catch (err) {
-    res.status(401).json({ error: 'Token is not valid' });
+  } catch (error) {
+    res.status(401).json({ error: 'Please authenticate.' });
   }
-}; 
+};
+
+const generateToken = (user) => {
+  return jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '24h' });
+};
+
+module.exports = { auth, generateToken }; 
